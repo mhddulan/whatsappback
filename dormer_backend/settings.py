@@ -25,7 +25,11 @@ SECRET_KEY = 'django-insecure-2v*tsajsefl8pp-4hr97qvjje@gmak7u#y87ynx=^34(wid2z+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "whatsappback-ewju.onrender.com",
+    "localhost",
+    "127.0.0.1",
+]
 
 
 # Application definition
