@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-2v*tsajsefl8pp-4hr97qvjje@gmak7u#y87ynx=^34(wid2z+
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    "whatsappback-ewju.onrender.com",
+    "whatsappback-1.onrender.com",
     "localhost",
     "127.0.0.1",
 ]
