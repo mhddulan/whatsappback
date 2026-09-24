@@ -8,11 +8,13 @@ from django.views.decorators.csrf import csrf_exempt
 
 VERIFY_TOKEN = "dormer_whatsapp_2026"
 
+BOOKING_URL = "https://www.zotel.ai/hotels/dormer-stay-calicut-beach"
+
 
 @csrf_exempt
 def webhook(request):
 
-    # Meta webhook verification
+    # Meta verification
     if request.method == "GET":
         token = request.GET.get("hub.verify_token")
         challenge = request.GET.get("hub.challenge")
@@ -22,7 +24,7 @@ def webhook(request):
 
         return HttpResponse("Invalid verify token", status=403)
 
-    # Incoming WhatsApp messages
+    # Incoming messages
     if request.method == "POST":
 
         try:
@@ -30,7 +32,6 @@ def webhook(request):
 
             print("WhatsApp:", data)
 
-            # Check whether this is actually a message
             entry = data.get("entry", [])
 
             if not entry:
@@ -42,78 +43,61 @@ def webhook(request):
                 return JsonResponse({"status": "received"})
 
             value = changes[0].get("value", {})
-
             messages = value.get("messages", [])
 
             if not messages:
                 return JsonResponse({"status": "received"})
 
             message = messages[0]
-
             customer_number = message.get("from")
 
-            # Only handle text messages for now
-            if message.get("type") != "text":
-                send_whatsapp_message(
-                    customer_number,
-                    "Please send us a text message so we can help you."
-                )
-                return JsonResponse({"status": "received"})
+            # --------------------------------
+            # TEXT MESSAGE
+            # --------------------------------
 
-            text = message.get("text", {}).get("body", "")
-            text = text.strip().lower()
+            if message.get("type") == "text":
 
-            print("Customer:", customer_number)
-            print("Message:", text)
-
-            # Main menu
-            if text in ["hi", "hello", "hey", "start", "menu"]:
-                send_whatsapp_message(
-                    customer_number,
-                    welcome_message()
+                text = (
+                    message.get("text", {})
+                    .get("body", "")
+                    .strip()
+                    .lower()
                 )
 
-            # Rooms
-            elif text in ["1", "rooms", "room", "beds", "bed"]:
-                send_whatsapp_message(
-                    customer_number,
-                    rooms_message()
-                )
+                print("Customer:", customer_number)
+                print("Message:", text)
 
-            # Availability
-            elif text in ["2", "availability", "available", "booking", "book"]:
-                send_whatsapp_message(
-                    customer_number,
-                    availability_message()
-                )
+                if text in ["hi", "hello", "hey", "start", "menu"]:
+                    send_main_menu(customer_number)
 
-            # Facilities
-            elif text in ["3", "facilities", "facility", "amenities"]:
-                send_whatsapp_message(
-                    customer_number,
-                    facilities_message()
-                )
+                else:
+                    send_unknown_message(customer_number)
 
-            # Location
-            elif text in ["4", "location", "address", "directions", "map"]:
-                send_whatsapp_message(
-                    customer_number,
-                    location_message()
-                )
+            # --------------------------------
+            # INTERACTIVE MENU RESPONSE
+            # --------------------------------
 
-            # Contact staff
-            elif text in ["5", "contact", "staff", "manager", "help"]:
-                send_whatsapp_message(
-                    customer_number,
-                    contact_message()
-                )
+            elif message.get("type") == "interactive":
 
-            # Unknown message
-            else:
-                send_whatsapp_message(
-                    customer_number,
-                    unknown_message()
-                )
+                interactive = message.get("interactive", {})
+
+                interaction_type = interactive.get("type")
+
+                # List menu selection
+                if interaction_type == "list_reply":
+
+                    selected_id = (
+                        interactive
+                        .get("list_reply", {})
+                        .get("id")
+                    )
+
+                    print("Selected:", selected_id)
+
+                    handle_menu_selection(
+                        customer_number,
+                        selected_id
+                    )
 
             return JsonResponse({"status": "received"})
 
@@ -122,7 +106,10 @@ def webhook(request):
             print("Webhook error:", str(e))
 
             return JsonResponse(
-                {"status": "error", "message": str(e)},
+                {
+                    "status": "error",
+                    "message": str(e)
+                },
                 status=200
             )
 
@@ -132,41 +119,137 @@ def webhook(request):
     )
 
 
-# ---------------------------------------
-# MESSAGE CONTENT
-# ---------------------------------------
+# =====================================================
+# MAIN MENU
+# =====================================================
 
-def welcome_message():
+def send_main_menu(to):
 
-    return """👋 Welcome to Dormer Stay!
+    phone_number_id = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
+    access_token = os.environ.get("WHATSAPP_ACCESS_TOKEN")
 
-How can we help you?
+    url = (
+        f"https://graph.facebook.com/v26.0/"
+        f"{phone_number_id}/messages"
+    )
 
-1️⃣ Rooms & Beds
-2️⃣ Availability
-3️⃣ Facilities
-4️⃣ Location
-5️⃣ Contact Staff
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
 
-Reply with a number or type your question."""
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+
+            "header": {
+                "type": "text",
+                "text": "Dormer Stay"
+            },
+
+            "body": {
+                "text": (
+                    "👋 Welcome to Dormer Stay!\n\n"
+                    "Please choose an option below 👇"
+                )
+            },
+
+            "footer": {
+                "text": "Dormer Stay Calicut"
+            },
+
+            "action": {
+                "button": "View Options",
+
+                "sections": [
+                    {
+                        "title": "How can we help?",
+                        "rows": [
+
+                            {
+                                "id": "rooms",
+                                "title": "🛏️ Rooms & Beds",
+                                "description": "View our accommodation options"
+                            },
+
+                            {
+                                "id": "availability",
+                                "title": "📅 Check Availability",
+                                "description": "Check dates and availability"
+                            },
+
+                            {
+                                "id": "booking",
+                                "title": "🔗 Create Booking",
+                                "description": "Book your stay online"
+                            },
+
+                            {
+                                "id": "facilities",
+                                "title": "🏨 Facilities",
+                                "description": "View available facilities"
+                            },
+
+                            {
+                                "id": "location",
+                                "title": "📍 Location",
+                                "description": "Find Dormer Stay"
+                            },
+
+                            {
+                                "id": "contact",
+                                "title": "👨‍💼 Contact Staff",
+                                "description": "Talk to our staff"
+                            }
+
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+
+    response = requests.post(
+        url,
+        headers=headers,
+        json=payload,
+        timeout=20
+    )
+
+    print(
+        "Menu response:",
+        response.status_code,
+        response.text
+    )
 
 
-def rooms_message():
+# =====================================================
+# MENU SELECTION HANDLER
+# =====================================================
 
-    return """🛏️ Rooms & Beds
+def handle_menu_selection(to, selected_id):
+
+    if selected_id == "rooms":
+
+        send_whatsapp_message(
+            to,
+            """🛏️ Rooms & Beds
 
 We offer comfortable accommodation at Dormer Stay.
 
-For room/bunk availability and current options, please reply:
+Our team can help you with available room and bed options.
 
-2️⃣ Availability
+📅 To check availability, choose Check Availability from the menu."""
+        )
 
-Or contact our staff for assistance."""
+    elif selected_id == "availability":
 
-
-def availability_message():
-
-    return """📅 Availability
+        send_whatsapp_message(
+            to,
+            """📅 Check Availability
 
 Please send us:
 
@@ -180,60 +263,81 @@ Check-in: 25 September
 Check-out: 28 September
 Guests: 2
 
-Our staff can then help you with availability."""
+Our staff will help you with availability."""
+        )
+
+    elif selected_id == "booking":
+
+        send_whatsapp_message(
+            to,
+            f"""🔗 Create Booking
+
+You can complete your booking securely through our booking website.
+
+👉 {BOOKING_URL}
+
+Select your dates and complete your booking there.
+
+Thank you for choosing Dormer Stay! ❤️"""
+        )
+
+    elif selected_id == "facilities":
+
+        send_whatsapp_message(
+            to,
+            """🏨 Facilities
+
+We are preparing our complete facilities list.
+
+For more information, please contact our staff.
+
+👨‍💼 Contact Staff"""
+        )
+
+    elif selected_id == "location":
+
+        send_whatsapp_message(
+            to,
+            """📍 Dormer Stay Calicut
+
+Our team can send you the exact location and directions.
+
+Please contact our staff for assistance."""
+        )
+
+    elif selected_id == "contact":
+
+        send_whatsapp_message(
+            to,
+            """👨‍💼 Contact Staff
+
+Please send your question here.
+
+Our staff will assist you as soon as possible."""
+        )
+
+    else:
+
+        send_unknown_message(to)
 
 
-def facilities_message():
+# =====================================================
+# UNKNOWN MESSAGE
+# =====================================================
 
-    return """🏨 Facilities
+def send_unknown_message(to):
 
-Dormer Stay provides comfortable accommodation and common facilities for guests.
+    send_whatsapp_message(
+        to,
+        """Sorry, I didn't understand that. 🙂
 
-For complete information about our current facilities, please contact our staff.
-
-5️⃣ Contact Staff"""
-
-
-def location_message():
-
-    return """📍 Location
-
-Dormer Stay is located in Calicut, Kerala.
-
-We can send you the exact location and directions.
-
-Please contact our staff:
-
-5️⃣ Contact Staff"""
+Please type "Hi" to see the Dormer Stay menu."""
+    )
 
 
-def contact_message():
-
-    return """👨‍💼 Contact Staff
-
-Our staff will assist you with your enquiry.
-
-Please send your question here and our team can help you."""
-
-
-def unknown_message():
-
-    return """Sorry, I didn't understand that. 🙂
-
-Please choose an option:
-
-1️⃣ Rooms & Beds
-2️⃣ Availability
-3️⃣ Facilities
-4️⃣ Location
-5️⃣ Contact Staff
-
-You can also type "Hi" to see the menu."""
-
-
-# ---------------------------------------
-# SEND WHATSAPP MESSAGE
-# ---------------------------------------
+# =====================================================
+# NORMAL TEXT MESSAGE
+# =====================================================
 
 def send_whatsapp_message(to, message):
 
